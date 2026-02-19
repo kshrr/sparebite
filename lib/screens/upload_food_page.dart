@@ -1,6 +1,13 @@
-import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
+
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 class UploadFoodPage extends StatefulWidget {
   const UploadFoodPage({super.key});
@@ -10,176 +17,284 @@ class UploadFoodPage extends StatefulWidget {
 }
 
 class _UploadFoodPageState extends State<UploadFoodPage> {
-  final _formKey = GlobalKey<FormState>();
-
-  final foodNameController = TextEditingController();
+  final nameController = TextEditingController();
   final quantityController = TextEditingController();
   final locationController = TextEditingController();
 
-  String category = "Prepared Meals";
+  File? imageFile;
+  Uint8List? webImage;
+
+  bool isLoading = false;
+
+  String selectedCategory = "Meals";
   DateTime? expiryTime;
 
-  Future<void> pickExpiryTime() async {
-    final picked = await showDatePicker(
-      context: context,
-      firstDate: DateTime.now(),
-      lastDate: DateTime(2030),
-      initialDate: DateTime.now(),
-    );
+  final picker = ImagePicker();
+  final auth = FirebaseAuth.instance;
+  final firestore = FirebaseFirestore.instance;
 
-    if (picked != null) {
-      setState(() => expiryTime = picked);
+  // ================= PICK IMAGE =================
+  Future<void> pickImage() async {
+    final picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked == null) return;
+
+    if (kIsWeb) {
+      final bytes = await picked.readAsBytes();
+      setState(() => webImage = bytes);
+    } else {
+      setState(() => imageFile = File(picked.path));
     }
   }
 
-  void submitForm() async {
-  if (_formKey.currentState!.validate()) {
-    try {
-      await FirebaseFirestore.instance
-          .collection("food_listings")
-          .add({
-        "foodName": foodNameController.text,
-        "quantity": quantityController.text,
-        "category": category,
-        "location": locationController.text,
-        "expiryTime": expiryTime,
-        "status": "pending",
-        "createdAt": Timestamp.now(),
-      });
+  // ================= PICK EXPIRY TIME =================
+  Future<void> pickExpiryTime() async {
+    final pickedDate = await showDatePicker(
+      context: context,
+      firstDate: DateTime.now(),
+      lastDate: DateTime(2100),
+      initialDate: DateTime.now(),
+    );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Food uploaded successfully")),
+    if (pickedDate == null) return;
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
+
+    if (pickedTime == null) return;
+
+    setState(() {
+      expiryTime = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        pickedTime.hour,
+        pickedTime.minute,
       );
+    });
+  }
 
-      Navigator.pop(context);
+  // ================= UPLOAD FOOD =================
+ Future<void> uploadFood() async {
+  final user = FirebaseAuth.instance.currentUser;
 
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+  if (user == null) {
+    showError("Please login first");
+    return;
+  }
+
+  if (nameController.text.trim().isEmpty ||
+      quantityController.text.trim().isEmpty ||
+      locationController.text.trim().isEmpty ||
+      expiryTime == null ||
+      (imageFile == null && webImage == null)) {
+    showError("Please fill all fields");
+    return;
+  }
+
+  setState(() => isLoading = true);
+
+  try {
+    final uid = user.uid;
+
+    print("Starting upload...");
+
+    // ---------- STORAGE UPLOAD ----------
+    final ref = FirebaseStorage.instance
+        .ref()
+        .child("food_images/${DateTime.now().millisecondsSinceEpoch}.jpg");
+
+    UploadTask uploadTask;
+
+    if (kIsWeb) {
+      uploadTask = ref.putData(webImage!);
+    } else {
+      uploadTask = ref.putFile(imageFile!);
     }
+
+    // timeout protection (VERY IMPORTANT)
+    final snapshot = await uploadTask.timeout(
+      const Duration(seconds: 20),
+      onTimeout: () {
+        throw Exception("Upload timeout. Check internet.");
+      },
+    );
+
+    final imageUrl = await snapshot.ref.getDownloadURL();
+
+    print("Image uploaded: $imageUrl");
+
+    // ---------- FIRESTORE WRITE ----------
+    await FirebaseFirestore.instance
+        .collection("food_listings")
+        .add({
+      "foodName": nameController.text.trim(),
+      "quantity": quantityController.text.trim(),
+      "category": selectedCategory,
+      "location": locationController.text.trim(),
+      "expiryTime": Timestamp.fromDate(expiryTime!),
+      "createdAt": Timestamp.now(),
+      "status": "pending",
+      "imageUrl": imageUrl,
+      "donorId": uid,
+    }).timeout(
+      const Duration(seconds: 10),
+      onTimeout: () => throw Exception("Database timeout"),
+    );
+
+    print("Firestore saved");
+
+    if (!mounted) return;
+
+    setState(() => isLoading = false);
+
+    Navigator.pop(context);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Food uploaded successfully")),
+    );
+
+  } catch (e) {
+    setState(() => isLoading = false);
+    showError(e.toString());
   }
 }
 
 
+  // ================= UI =================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Upload Surplus Food")),
-
-      body: Padding(
+      appBar: AppBar(title: const Text("Donate Food")),
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
+        child: Column(
+          children: [
 
-              /// Food Name
-              TextFormField(
-                controller: foodNameController,
-                decoration: const InputDecoration(
-                  labelText: "Food Name",
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) =>
-                    value!.isEmpty ? "Enter food name" : null,
-              ),
-
-              const SizedBox(height: 15),
-
-              /// Quantity
-              TextFormField(
-                controller: quantityController,
-                decoration: const InputDecoration(
-                  labelText: "Quantity (e.g. 25 meals)",
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) =>
-                    value!.isEmpty ? "Enter quantity" : null,
-              ),
-
-              const SizedBox(height: 15),
-
-              /// Category Dropdown
-              DropdownButtonFormField(
-                value: category,
-                decoration: const InputDecoration(
-                  labelText: "Category",
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(
-                    value: "Prepared Meals",
-                    child: Text("Prepared Meals"),
-                  ),
-                  DropdownMenuItem(
-                    value: "Baked Goods",
-                    child: Text("Baked Goods"),
-                  ),
-                  DropdownMenuItem(
-                    value: "Fresh Produce",
-                    child: Text("Fresh Produce"),
-                  ),
-                ],
-                onChanged: (value) {
-                  setState(() => category = value!);
-                },
-              ),
-
-              const SizedBox(height: 15),
-
-              /// Expiry Time Picker
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text("Expiry Date"),
-                subtitle: Text(
-                  expiryTime == null
-                      ? "Select expiry date"
-                      : expiryTime.toString().split(" ")[0],
-                ),
-                trailing: const Icon(Icons.calendar_today),
-                onTap: pickExpiryTime,
-              ),
-
-              const SizedBox(height: 15),
-
-              /// Pickup Location
-              TextFormField(
-                controller: locationController,
-                decoration: const InputDecoration(
-                  labelText: "Pickup Location",
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) =>
-                    value!.isEmpty ? "Enter location" : null,
-              ),
-
-              const SizedBox(height: 20),
-
-              /// Upload Image Button (UI only)
-              OutlinedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.image),
-                label: const Text("Upload Food Image"),
-              ),
-
-              const SizedBox(height: 30),
-
-              /// Submit Button
-              SizedBox(
+            // IMAGE PICKER
+            GestureDetector(
+              onTap: pickImage,
+              child: Container(
+                height: 180,
                 width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: submitForm,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.all(16),
-                  ),
-                  child: const Text("Create Listing"),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                child: (imageFile == null && webImage == null)
+                    ? const Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.add_a_photo, size: 40),
+                          SizedBox(height: 8),
+                          Text("Tap to upload image"),
+                        ],
+                      )
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: kIsWeb
+                            ? Image.memory(webImage!, fit: BoxFit.cover)
+                            : Image.file(imageFile!, fit: BoxFit.cover),
+                      ),
               ),
-            ],
-          ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // FOOD NAME
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: "Food Name",
+                border: OutlineInputBorder(),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // QUANTITY
+            TextField(
+              controller: quantityController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: "Quantity",
+                border: OutlineInputBorder(),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // CATEGORY
+            DropdownButtonFormField(
+              value: selectedCategory,
+              items: const [
+                DropdownMenuItem(value: "Meals", child: Text("Meals")),
+                DropdownMenuItem(value: "Baked Goods", child: Text("Baked Goods")),
+                DropdownMenuItem(value: "Groceries", child: Text("Groceries")),
+                DropdownMenuItem(value: "Others", child: Text("Others")),
+              ],
+              onChanged: (value) {
+                setState(() => selectedCategory = value.toString());
+              },
+              decoration: const InputDecoration(
+                labelText: "Category",
+                border: OutlineInputBorder(),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // LOCATION
+            TextField(
+              controller: locationController,
+              decoration: const InputDecoration(
+                labelText: "Pickup Location",
+                border: OutlineInputBorder(),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // EXPIRY TIME
+            ListTile(
+              title: Text(
+                expiryTime == null
+                    ? "Select Expiry Time"
+                    : expiryTime.toString(),
+              ),
+              trailing: const Icon(Icons.calendar_today),
+              onTap: pickExpiryTime,
+            ),
+
+            const SizedBox(height: 24),
+
+            // SUBMIT
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: isLoading ? null : uploadFood,
+                child: isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text("Post Food"),
+              ),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  void showError(String message) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    quantityController.dispose();
+    locationController.dispose();
+    super.dispose();
   }
 }

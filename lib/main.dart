@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'screens/homepage.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-import 'screens/restaurant_dashboard.dart';
-import 'screens/ngo_dashboard.dart';
+import 'screens/dashboard.dart';
+import 'screens/login.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

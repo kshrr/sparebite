@@ -1,198 +1,160 @@
 import 'package:flutter/material.dart';
 import 'login.dart';
 
-class LandingPage extends StatelessWidget {
+class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
+
+  @override
+  State<LandingPage> createState() => _LandingPageState();
+}
+
+class _LandingPageState extends State<LandingPage> {
+  final PageController controller = PageController();
+  int currentPage = 0;
+
+  final List<Map<String, String>> pages = [
+    {
+      "title": "Rescue Surplus Food",
+      "desc":
+          "Restaurants upload extra food. SpareBite prevents waste and helps communities.",
+    },
+    {
+      "title": "AI Matches NGOs",
+      "desc":
+          "Our AI automatically matches food to the best nearby NGO for fast collection.",
+    },
+    {
+      "title": "Create Real Impact",
+      "desc":
+          "Reduce food waste, save the environment, and feed people in need.",
+    },
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        width: double.infinity,
+      backgroundColor: Colors.white,
 
-        // Gradient background
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Color(0xFFE8F5E9),
-              Colors.white,
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
+      body: Column(
+        children: [
 
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 28),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-
-                // ---------------- TOP NAV ----------------
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      "SpareBite",
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green,
-                      ),
-                    ),
-
-                    TextButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const AuthPage(role: ''),
-                          ),
-                        );
-                      },
-                      child: const Text(
-                        "Sign In",
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.black87,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const Spacer(),
-
-                // ---------------- BADGE ----------------
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade100,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    "🌱 Zero waste, maximum impact",
-                    style: TextStyle(
-                      color: Colors.green,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 30),
-
-                // ---------------- MAIN TITLE ----------------
-                const Text(
-                  "Rescue Food.\nFeed Communities.",
-                  style: TextStyle(
-                    fontSize: 44,
-                    fontWeight: FontWeight.bold,
-                    height: 1.2,
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                // ---------------- DESCRIPTION ----------------
-                const Text(
-                  "AI-powered platform connecting restaurants with NGOs. "
-                  "Surplus food is automatically matched to the best NGO — ensuring zero waste and faster distribution.",
-                  style: TextStyle(
-                    fontSize: 16,
-                    height: 1.6,
-                    color: Colors.black54,
-                  ),
-                ),
-
-                const SizedBox(height: 50),
-
-                // ---------------- ACTION BUTTONS ----------------
-                Row(
-                  children: [
-
-                    // Donate Button
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          padding: const EdgeInsets.symmetric(vertical: 18),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          elevation: 3,
-                        ),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  const AuthPage(role: "Restaurant"),
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          "Start Donating",
-                          style: TextStyle(fontSize: 16),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(width: 16),
-
-                    // NGO Button
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 18),
-                          side: const BorderSide(color: Colors.green),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  const AuthPage(role: "NGO"),
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          "Join as NGO",
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.green,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const Spacer(),
-
-                // ---------------- FOOTER ----------------
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.only(bottom: 20),
-                    child: Text(
-                      "Reducing food waste with AI-driven NGO matching",
-                      style: TextStyle(
-                        color: Colors.black45,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+          // ---------- SKIP BUTTON ----------
+          Align(
+            alignment: Alignment.topRight,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 50, right: 20),
+              child: TextButton(
+                onPressed: () => _goToLogin(),
+                child: const Text("Skip"),
+              ),
             ),
           ),
-        ),
+
+          // ---------- PAGE VIEW ----------
+          Expanded(
+            child: PageView.builder(
+              controller: controller,
+              itemCount: pages.length,
+              onPageChanged: (index) {
+                setState(() => currentPage = index);
+              },
+              itemBuilder: (_, index) {
+                return Padding(
+                  padding: const EdgeInsets.all(30),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+
+                      // Placeholder illustration
+                      Icon(
+                        Icons.food_bank,
+                        size: 120,
+                        color: Colors.green.shade400,
+                      ),
+
+                      const SizedBox(height: 40),
+
+                      Text(
+                        pages[index]["title"]!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      Text(
+                        pages[index]["desc"]!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Colors.black54,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // ---------- DOT INDICATOR ----------
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(
+              pages.length,
+              (index) => Container(
+                margin: const EdgeInsets.all(4),
+                width: currentPage == index ? 12 : 8,
+                height: currentPage == index ? 12 : 8,
+                decoration: BoxDecoration(
+                  color: currentPage == index
+                      ? Colors.green
+                      : Colors.grey.shade300,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 40),
+
+          // ---------- GET STARTED BUTTON ----------
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed: _goToLogin,
+                child: const Text(
+                  "Get Started",
+                  style: TextStyle(fontSize: 16),
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 50),
+        ],
+      ),
+    );
+  }
+
+  void _goToLogin() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const AuthPage(),
       ),
     );
   }
